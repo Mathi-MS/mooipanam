@@ -1,0 +1,139 @@
+.requests-page {
+    padding: 24px;
+    height: 100%;
+}
+
+.requests-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    gap: 16px;
+}
+
+.status-badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-badge.pending {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.status-badge.accepted {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.status-badge.rejected {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.status-badge.deleted {
+    background: #f3f4f6;
+    color: #4b5563;
+    opacity: 0.7;
+}
+
+.btn-add {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: var(--accent-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 4px 12px rgba(101, 163, 13, 0.2);
+}
+
+.btn-add:hover {
+    filter: brightness(1.1);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(101, 163, 13, 0.3);
+}
+
+.actions-cell {
+    display: flex;
+    gap: 8px;
+}
+
+.action-icon-btn {
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.action-icon-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+.action-icon-btn.delete:hover {
+    color: #dc2626;
+    border-color: #dc2626;
+    background: #fef2f2;
+}
+
+.review-btn {
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: 0.2s;
+}
+
+.review-btn.accept {
+    background: #16a34a;
+    color: white;
+}
+
+.review-btn.reject {
+    background: #dc2626;
+    color: white;
+}
+
+.review-btn:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+
+.details-popover {
+    font-size: 13px;
+    color: var(--text-secondary);
+    max-width: 250px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (max-width: 768px) {
+    .requests-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .btn-add {
+        width: 100%;
+        justify-content: center;
+    }
+}
