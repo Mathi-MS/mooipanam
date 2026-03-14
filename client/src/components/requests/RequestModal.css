@@ -10,18 +10,25 @@
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    padding: 20px;
+    padding: 12px;
 }
 
 .modal-content {
     background: var(--bg-primary);
-    width: 100%;
-    max-width: 650px;
+    width: 95%;
+    max-width: 600px;
+    max-height: 90vh;
     border-radius: var(--radius-lg);
-    border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    box-shadow: var(--shadow-xl);
+    animation: modalAppear 0.3s ease-out;
     overflow: hidden;
-    animation: modalSlideIn 0.3s ease-out;
+}
+
+.offline-modal {
+    max-width: 450px !important;
 }
 
 @keyframes modalSlideIn {
@@ -37,7 +44,7 @@
 }
 
 .modal-header {
-    padding: 20px 24px;
+    padding: 16px 20px;
     border-bottom: 1px solid var(--border-color);
     display: flex;
     justify-content: space-between;
@@ -70,7 +77,7 @@
 /* Stepper */
 .stepper {
     display: flex;
-    padding: 24px;
+    padding: 16px;
     justify-content: center;
     gap: 12px;
 }
@@ -107,7 +114,7 @@
 }
 
 .step-divider {
-    width: 40px;
+    width: 20px;
     height: 1px;
     background: var(--border-color);
     align-self: center;
@@ -115,7 +122,9 @@
 
 /* Form Styles */
 .modal-body {
-    padding: 0 24px 24px;
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
 }
 
 .form-grid {
@@ -156,6 +165,17 @@
 .form-group input:focus {
     border-color: var(--accent-primary);
     box-shadow: 0 0 0 3px rgba(101, 163, 13, 0.1);
+}
+
+.error-text {
+    color: #ef4444;
+    font-size: 11px;
+    font-weight: 500;
+    margin-top: 2px;
+}
+
+.form-group input.error {
+    border-color: #ef4444;
 }
 
 /* Payment Selection */
@@ -262,7 +282,7 @@
 
 /* Footer */
 .modal-footer {
-    padding: 16px 24px;
+    padding: 12px 20px;
     border-top: 1px solid var(--border-color);
     display: flex;
     justify-content: space-between;
@@ -319,5 +339,34 @@
 
     .payment-options {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 400px) {
+    .step span {
+        display: none;
+    }
+    .stepper {
+        gap: 8px;
+        padding: 12px;
+    }
+    .modal-content {
+        border-radius: var(--radius-md);
+        max-height: 95vh;
+    }
+    .modal-header {
+        padding: 12px 16px;
+    }
+    .modal-footer {
+        padding: 10px 16px;
+    }
+}
+
+@media (max-width: 350px) {
+    .form-grid {
+        gap: 12px;
+    }
+    .modal-body {
+        padding: 0 12px 20px;
     }
 }

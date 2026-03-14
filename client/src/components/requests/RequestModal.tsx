@@ -30,6 +30,38 @@ const RequestModal: React.FC<RequestModalProps> = ({
     });
     const [paymentType, setPaymentType] = useState<'online' | 'offline' | 'both'>('online');
     const [acceptedTerms, setAcceptedTerms] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
+    const validateField = (name: string, value: string) => {
+        let error = '';
+        switch (name) {
+            case 'mobile':
+                if (!/^\d{10}$/.test(value)) error = 'Mobile number must be exactly 10 digits';
+                break;
+            case 'name':
+            case 'city':
+            case 'town':
+                if (value.length < 3 || value.length > 30) error = 'Must be between 3 and 30 characters';
+                break;
+            case 'address':
+                if (value.length < 3 || value.length > 200) error = 'Must be between 3 and 200 characters';
+                break;
+            case 'brideName':
+            case 'groomName':
+                if (value.length < 3 || value.length > 50) error = 'Must be between 3 and 50 characters';
+                break;
+            case 'dateTime':
+                if (value) {
+                    const selected = new Date(value);
+                    const nowPlus2H = new Date(new Date().getTime() + 2 * 60 * 60 * 1000);
+                    if (selected < nowPlus2H) error = 'Please select a time at least 2 hours from now';
+                }
+                break;
+            default:
+                if (!value) error = 'Field is required';
+        }
+        setErrors(prev => ({ ...prev, [name]: error }));
+    };
 
     const formatDateTimeForInput = (isoString: string) => {
         if (!isoString) return '';
@@ -69,8 +101,9 @@ const RequestModal: React.FC<RequestModalProps> = ({
                     groomName: ''
                 });
                 setPaymentType('online');
-                setAcceptedTerms(false);
+                setStep(1);
             }
+            setErrors({});
             setStep(1);
         }
     }, [isOpen, initialData, mode]);
@@ -90,7 +123,9 @@ const RequestModal: React.FC<RequestModalProps> = ({
         }
     };
 
-    const isStep1Valid = Object.values(details).every(val => val !== '');
+    const isStep1Valid = 
+        Object.values(details).every(val => val !== '') && 
+        Object.values(errors).every(err => !err);
     const isView = mode === 'view';
 
     const getModalTitle = () => {
@@ -134,8 +169,13 @@ const RequestModal: React.FC<RequestModalProps> = ({
                                     placeholder="Enter your name"
                                     disabled={isView}
                                     value={details.name}
-                                    onChange={(e) => setDetails({ ...details, name: e.target.value })}
+                                    onBlur={() => validateField('name', details.name)}
+                                    onChange={(e) => {
+                                        setDetails({ ...details, name: e.target.value });
+                                        if (errors.name) validateField('name', e.target.value);
+                                    }}
                                 />
+                                {errors.name && <span className="error-text">{errors.name}</span>}
                             </div>
                             <div className="form-group">
                                 <label>Mobile Number</label>
@@ -144,8 +184,14 @@ const RequestModal: React.FC<RequestModalProps> = ({
                                     placeholder="Enter mobile number"
                                     disabled={isView}
                                     value={details.mobile}
-                                    onChange={(e) => setDetails({ ...details, mobile: e.target.value })}
+                                    onBlur={() => validateField('mobile', details.mobile)}
+                                    onChange={(e) => {
+                                        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                        setDetails({ ...details, mobile: val });
+                                        if (errors.mobile) validateField('mobile', val);
+                                    }}
                                 />
+                                {errors.mobile && <span className="error-text">{errors.mobile}</span>}
                             </div>
                             <div className="form-group">
                                 <label>City / District</label>
@@ -154,8 +200,13 @@ const RequestModal: React.FC<RequestModalProps> = ({
                                     placeholder="City or District"
                                     disabled={isView}
                                     value={details.city}
-                                    onChange={(e) => setDetails({ ...details, city: e.target.value })}
+                                    onBlur={() => validateField('city', details.city)}
+                                    onChange={(e) => {
+                                        setDetails({ ...details, city: e.target.value });
+                                        if (errors.city) validateField('city', e.target.value);
+                                    }}
                                 />
+                                {errors.city && <span className="error-text">{errors.city}</span>}
                             </div>
                             <div className="form-group">
                                 <label>Town / Village</label>
@@ -164,8 +215,13 @@ const RequestModal: React.FC<RequestModalProps> = ({
                                     placeholder="Town or Village"
                                     disabled={isView}
                                     value={details.town}
-                                    onChange={(e) => setDetails({ ...details, town: e.target.value })}
+                                    onBlur={() => validateField('town', details.town)}
+                                    onChange={(e) => {
+                                        setDetails({ ...details, town: e.target.value });
+                                        if (errors.town) validateField('town', e.target.value);
+                                    }}
                                 />
+                                {errors.town && <span className="error-text">{errors.town}</span>}
                             </div>
                             <div className="form-group full-width">
                                 <label>Address</label>
@@ -174,8 +230,13 @@ const RequestModal: React.FC<RequestModalProps> = ({
                                     placeholder="Full address details"
                                     disabled={isView}
                                     value={details.address}
-                                    onChange={(e) => setDetails({ ...details, address: e.target.value })}
+                                    onBlur={() => validateField('address', details.address)}
+                                    onChange={(e) => {
+                                        setDetails({ ...details, address: e.target.value });
+                                        if (errors.address) validateField('address', e.target.value);
+                                    }}
                                 />
+                                {errors.address && <span className="error-text">{errors.address}</span>}
                             </div>
                             <div className="form-group">
                                 <label>Date and Time</label>
@@ -183,8 +244,14 @@ const RequestModal: React.FC<RequestModalProps> = ({
                                     type="datetime-local"
                                     disabled={isView}
                                     value={details.dateTime}
-                                    onChange={(e) => setDetails({ ...details, dateTime: e.target.value })}
+                                    min={new Date(new Date().getTime() + 2 * 60 * 60 * 1000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
+                                    onBlur={() => validateField('dateTime', details.dateTime)}
+                                    onChange={(e) => {
+                                        setDetails({ ...details, dateTime: e.target.value });
+                                        validateField('dateTime', e.target.value);
+                                    }}
                                 />
+                                {errors.dateTime && <span className="error-text">{errors.dateTime}</span>}
                             </div>
                             <div className="form-group">
                                 <label>Bride Name</label>
@@ -193,8 +260,13 @@ const RequestModal: React.FC<RequestModalProps> = ({
                                     placeholder="Enter bride's name"
                                     disabled={isView}
                                     value={details.brideName}
-                                    onChange={(e) => setDetails({ ...details, brideName: e.target.value })}
+                                    onBlur={() => validateField('brideName', details.brideName)}
+                                    onChange={(e) => {
+                                        setDetails({ ...details, brideName: e.target.value });
+                                        if (errors.brideName) validateField('brideName', e.target.value);
+                                    }}
                                 />
+                                {errors.brideName && <span className="error-text">{errors.brideName}</span>}
                             </div>
                             <div className="form-group">
                                 <label>Groom Name</label>
@@ -203,8 +275,13 @@ const RequestModal: React.FC<RequestModalProps> = ({
                                     placeholder="Enter groom's name"
                                     disabled={isView}
                                     value={details.groomName}
-                                    onChange={(e) => setDetails({ ...details, groomName: e.target.value })}
+                                    onBlur={() => validateField('groomName', details.groomName)}
+                                    onChange={(e) => {
+                                        setDetails({ ...details, groomName: e.target.value });
+                                        if (errors.groomName) validateField('groomName', e.target.value);
+                                    }}
                                 />
+                                {errors.groomName && <span className="error-text">{errors.groomName}</span>}
                             </div>
                         </div>
                     )}
@@ -212,7 +289,7 @@ const RequestModal: React.FC<RequestModalProps> = ({
                     {step === 2 && (
                         <div>
                             <p style={{ margin: '0 0 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                                {isView ? 'Selected payment method:' : 'Select your preferred payment method:'}
+                                {isView ? 'Selected payment Type:' : 'Select your preferred payment Type:'}
                             </p>
                             <div className="payment-options">
                                 <div

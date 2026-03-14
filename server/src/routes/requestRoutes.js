@@ -9,6 +9,7 @@ const {
     reviewRequest,
     getRequestDetailsPublic,
     submitOfflinePayment,
+    createOrder,
     verifyOnlinePayment,
     getPaymentReports,
     getDashboardStats
@@ -34,6 +35,7 @@ router.patch('/:id/review', protect, authorize('admin', 'superadmin'), reviewReq
 // Payment Routes
 router.get('/:id/public', getRequestDetailsPublic);
 router.post('/:id/offline-payment', protect, submitOfflinePayment);
+router.post('/create-order', createOrder);
 router.post('/:id/verify-payment', verifyOnlinePayment);
 
 module.exports = router;

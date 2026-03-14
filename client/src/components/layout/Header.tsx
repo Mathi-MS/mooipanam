@@ -12,6 +12,7 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     const location = useLocation();
     const user = useSelector((state: RootState) => state.auth.user);
+    const name = user?.name || "Admin";
 
     const getPageTitle = () => {
         const path = location.pathname;
@@ -41,7 +42,9 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                         <UserIcon size={20} />
                     </div>
                     <div className="user-info">
-                        <span className="user-name">{user?.name || 'Admin'}</span>
+                        <span className="user-name" title={name}>
+                            {name.length > 7 ? `${name.slice(0, 7)}...` : name}
+                        </span>
                         <span className="user-role">{user?.role || 'Administrator'}</span>
                     </div>
                 </div>

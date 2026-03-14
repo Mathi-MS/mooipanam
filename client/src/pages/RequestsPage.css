@@ -9,6 +9,7 @@
     align-items: center;
     margin-bottom: 24px;
     gap: 16px;
+    flex-wrap: wrap;
 }
 
 .status-badge {
@@ -135,5 +136,54 @@
     .btn-add {
         width: 100%;
         justify-content: center;
+    }
+}
+
+.table-container {
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+    overflow-x: auto;
+}
+
+.users-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    min-width: 800px;
+}
+
+.users-table th {
+    padding: 16px 24px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.users-table td {
+    padding: 16px 24px;
+    font-size: 14px;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.users-table tr:last-child td {
+    border-bottom: none;
+}
+
+.users-table tr:hover td {
+    background: rgba(var(--accent-primary-rgb, 101, 163, 13), 0.05);
+}
+
+@media (max-width: 600px) {
+    .requests-page{
+        padding:20px 0px;
+        width: 90%;
+        margin: auto;
     }
 }

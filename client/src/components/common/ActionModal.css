@@ -10,7 +10,7 @@
     align-items: center;
     justify-content: center;
     z-index: 2000;
-    padding: 20px;
+    padding: 12px;
 }
 
 .action-modal-content {
@@ -37,7 +37,7 @@
 }
 
 .action-modal-header {
-    padding: 20px 24px 12px;
+    padding: 16px 16px 8px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -51,7 +51,7 @@
 }
 
 .action-modal-body {
-    padding: 0 24px 24px;
+    padding: 0 16px 20px;
 }
 
 .action-modal-body p {
@@ -81,7 +81,7 @@
 }
 
 .action-modal-footer {
-    padding: 16px 24px;
+    padding: 12px 16px;
     background: var(--bg-secondary);
     border-top: 1px solid var(--border-color);
     display: flex;

@@ -1,4 +1,6 @@
 const Request = require('../models/Request');
+const Razorpay = require('razorpay');
+const crypto = require('crypto');
 
 // @desc    Create new request
 // @route   POST /api/requests
@@ -26,14 +28,26 @@ const createRequest = async (req, res) => {
 const getRequests = async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
+        const limit = parseInt(req.query.limit) || 5;
         const skip = (page - 1) * limit;
 
+        const { search } = req.query;
         let query = {};
 
         // If not admin/superadmin, only show user's own requests
         if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
             query.user = req.user._id;
+        }
+
+        // Search filter
+        if (search) {
+            query.$or = [
+                { 'details.name': { $regex: search, $options: 'i' } },
+                { 'details.brideName': { $regex: search, $options: 'i' } },
+                { 'details.groomName': { $regex: search, $options: 'i' } },
+                { 'details.city': { $regex: search, $options: 'i' } },
+                { 'details.mobile': { $regex: search, $options: 'i' } }
+            ];
         }
 
         const requests = await Request.find(query)
@@ -238,35 +252,115 @@ const submitOfflinePayment = async (req, res) => {
     }
 };
 
+// @desc    Create Razorpay Order
+// @route   POST /api/requests/create-order
+// @access  Public
+const createOrder = async (req, res) => {
+    try {
+        const { requestId, amount, payerName, payerDistrict } = req.body;
+        console.log('Creating Order for Request:', requestId, 'Amount:', amount);
+
+        if (!requestId || !amount) {
+            return res.status(400).json({ message: 'Request ID and amount are required' });
+        }
+
+        if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+            console.error('Razorpay keys are missing in .env');
+            return res.status(500).json({ message: 'Razorpay configuration missing' });
+        }
+
+        const razorpay = new Razorpay({
+            key_id: process.env.RAZORPAY_KEY_ID,
+            key_secret: process.env.RAZORPAY_KEY_SECRET
+        });
+
+        const options = {
+            amount: Math.round(amount * 100), // amount in the smallest currency unit (paise)
+            currency: "INR",
+            receipt: `rcpt_${requestId.toString().slice(-10)}_${Date.now().toString().slice(-10)}`
+        };
+
+        const order = await razorpay.orders.create(options);
+
+        res.json({
+            orderId: order.id,
+            amount: order.amount,
+            key: process.env.RAZORPAY_KEY_ID
+        });
+    } catch (error) {
+        console.error('Razorpay Order Creation Error Full:', JSON.stringify(error, null, 2));
+        console.error('Razorpay Order Creation Error Message:', error.message);
+        res.status(500).json({ 
+            message: 'Failed to create Razorpay order',
+            error: error.message || 'Unknown error',
+            details: error
+        });
+    }
+};
+
 // @desc    Verify online payment (Razorpay)
 // @route   POST /api/requests/:id/verify-payment
 // @access  Public (called after razorpay success)
 const verifyOnlinePayment = async (req, res) => {
-    const { name, district, amount, razorpay_payment_id } = req.body;
+    const { 
+        razorpay_order_id, 
+        razorpay_payment_id, 
+        razorpay_signature, 
+        requestId, 
+        amount, 
+        payerName, 
+        payerDistrict 
+    } = req.body;
 
-    // Ideally, we'd verify the signature here with Razorpay SDK
-    
+    console.log('Verifying Online Payment:', {
+        razorpay_order_id,
+        razorpay_payment_id,
+        requestId,
+        amount,
+        payerName
+    });
+
     try {
-        const request = await Request.findById(req.params.id);
+        // Verification Logic
+        if (!process.env.RAZORPAY_KEY_SECRET) {
+            console.error('RAZORPAY_KEY_SECRET missing in .env');
+            return res.status(500).json({ message: 'Razorpay configuration missing' });
+        }
+        
+        const shasum = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET);
+        shasum.update(`${razorpay_order_id}|${razorpay_payment_id}`);
+        const digest = shasum.digest('hex');
+
+        if (digest !== razorpay_signature) {
+            console.error('Signature Mismatch:', { digest, razorpay_signature });
+            return res.status(400).json({ message: 'Payment verification failed: Invalid signature' });
+        }
+
+        const request = await Request.findById(requestId || req.params.id);
 
         if (!request) {
+            console.error('Request not found during verification:', requestId || req.params.id);
             return res.status(404).json({ message: 'Request not found' });
         }
 
+        console.log('Updating Request Payment Status:', request._id);
         request.paymentStatus = 'paid';
         request.totalAmount = (request.totalAmount || 0) + Number(amount);
         request.payments.push({
             method: 'online',
             transactionId: razorpay_payment_id,
-            name,
-            district,
+            orderId: razorpay_order_id,
+            name: payerName,
+            district: payerDistrict,
             amount: Number(amount),
             paidAt: new Date()
         });
 
-        await request.save();
-        res.json({ message: 'Payment verified and stored successfully', request });
+        const savedRequest = await request.save();
+        console.log('Payment saved successfully for request:', savedRequest._id);
+        res.json({ message: 'Payment verified and stored successfully', request: savedRequest });
     } catch (error) {
+        console.error('Razorpay Verification Error:', error);
         res.status(500).json({ message: error.message });
     }
 };
@@ -276,50 +370,85 @@ const verifyOnlinePayment = async (req, res) => {
 // @access  Private/Admin
 const getPaymentReports = async (req, res) => {
     try {
-        let query = { 
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 5;
+        const skip = (page - 1) * limit;
+        const search = req.query.search || '';
+
+        let matchQuery = { 
             payments: { $exists: true, $not: { $size: 0 } }
         };
 
         if (req.user && req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-            query.user = req.user._id;
+            matchQuery.user = req.user._id;
         }
 
-        const requests = await Request.find(query)
-            .populate('user', 'name email')
-            .sort({ createdAt: -1 });
+        const aggregationPipeline = [
+            { $match: matchQuery },
+            { $unwind: "$payments" },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "user",
+                    foreignField: "_id",
+                    as: "userDetails"
+                }
+            },
+            { $unwind: { path: "$userDetails", preserveNullAndEmptyArrays: true } }
+        ];
 
-        // Flatten payments for the report
-        const reports = [];
-        requests.forEach(requestDoc => {
-            if (Array.isArray(requestDoc.payments)) {
-                requestDoc.payments.forEach(payment => {
-                    reports.push({
-                        _id: payment._id,
-                        requestId: requestDoc._id,
-                        user: requestDoc.user,
-                        details: requestDoc.details,
-                        paymentStatus: requestDoc.paymentStatus,
-                        amount: payment.amount || requestDoc.totalAmount || 0,
-                        paymentDetails: {
-                            method: payment.method,
-                            transactionId: payment.transactionId,
-                            name: payment.name,
-                            district: payment.district,
-                            paidAt: payment.paidAt
-                        }
-                    });
-                });
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            aggregationPipeline.push({
+                $match: {
+                    $or: [
+                        { "details.name": searchRegex },
+                        { "payments.name": searchRegex },
+                        { "payments.district": searchRegex },
+                        { "payments.method": searchRegex }
+                    ]
+                }
+            });
+        }
+
+        aggregationPipeline.push(
+            { $sort: { "payments.paidAt": -1 } },
+            {
+                $project: {
+                    _id: "$payments._id",
+                    requestId: "$_id",
+                    user: { name: "$userDetails.name", email: "$userDetails.email" },
+                    details: "$details",
+                    paymentStatus: "$paymentStatus",
+                    amount: { $cond: [{ $ifNull: ["$payments.amount", false] }, "$payments.amount", "$totalAmount"] },
+                    paymentDetails: {
+                        method: "$payments.method",
+                        transactionId: "$payments.transactionId",
+                        name: "$payments.name",
+                        district: "$payments.district",
+                        paidAt: "$payments.paidAt"
+                    }
+                }
+            },
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }, { $addFields: { page: page } }],
+                    data: [{ $skip: skip }, { $limit: limit }]
+                }
             }
-        });
+        );
 
-        // Sort by payment date
-        reports.sort((a, b) => {
-            const dateA = a.paymentDetails.paidAt ? new Date(a.paymentDetails.paidAt) : new Date(0);
-            const dateB = b.paymentDetails.paidAt ? new Date(b.paymentDetails.paidAt) : new Date(0);
-            return dateB - dateA;
-        });
+        const result = await Request.aggregate(aggregationPipeline);
+        const metadata = result[0].metadata[0] || { total: 0, page: page };
+        const reports = result[0].data;
+        const totalPages = Math.ceil(metadata.total / limit);
 
-        res.json(reports);
+        res.json({
+            reports,
+            totalPages,
+            currentPage: metadata.page,
+            totalReports: metadata.total
+        });
     } catch (error) {
         console.error('Error in getPaymentReports:', error);
         res.status(500).json({ message: error.message, stack: error.stack });
@@ -428,6 +557,7 @@ module.exports = {
     reviewRequest,
     getRequestDetailsPublic,
     submitOfflinePayment,
+    createOrder,
     verifyOnlinePayment,
     getPaymentReports,
     getDashboardStats

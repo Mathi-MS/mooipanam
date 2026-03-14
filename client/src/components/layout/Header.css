@@ -112,12 +112,24 @@
         display: none;
     }
 
-    .user-name {
+    /* .user-name {
         display: none;
-    }
+    } */
 
     .user-profile {
         padding-left: 0;
         border-left: none;
+    }
+}
+
+@media (max-width: 400px) {
+    .header {
+        padding: 0 8px;
+    }
+    .header-right {
+        gap: 8px;
+    }
+    .user-profile {
+        gap: 8px;
     }
 }
