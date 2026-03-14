@@ -4,7 +4,7 @@ import { store } from '../redux/store';
 import { logout } from '../redux/slices/authSlice';
 
 const api = axios.create({
-    baseURL: 'http://localhost:5000/api',
+    baseURL: 'https://mooipanam.onrender.com/api',
 });
 
 // Interceptor to add token to headers
