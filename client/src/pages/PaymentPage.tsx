@@ -15,17 +15,29 @@ const PaymentPage: React.FC = () => {
 
     // Form state
     const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
+    const [mobile, setMobile] = useState('');
     const [district, setDistrict] = useState('');
     const [amount, setAmount] = useState('');
     const [errors, setErrors] = useState<Record<string, string>>({});
 
     const validateField = (fieldName: string, value: string) => {
         let errorMsg = '';
-        if (fieldName === 'name' || fieldName === 'district') {
+        if (fieldName === 'name' || fieldName === 'district' || fieldName === 'email' || fieldName === 'mobile') {
             if (value.trim().length === 0) {
-                errorMsg = ''; // Don't show error if empty during typing until blur or first submit
-            } else if (value.trim().length < 3 || value.trim().length > 50) {
-                errorMsg = 'Must be between 3 and 50 characters';
+                errorMsg = '';
+            } else {
+                if (fieldName === 'name' || fieldName === 'district') {
+                    if (value.trim().length < 3 || value.trim().length > 50) {
+                        errorMsg = 'Must be between 3 and 50 characters';
+                    }
+                }
+                if (fieldName === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+                    errorMsg = 'Invalid email address';
+                }
+                if (fieldName === 'mobile' && !/^\d{10}$/.test(value)) {
+                    errorMsg = 'Invalid mobile number (10 digits)';
+                }
             }
         }
         setErrors(prev => ({ ...prev, [fieldName]: errorMsg }));
@@ -51,11 +63,13 @@ const PaymentPage: React.FC = () => {
 
     const handleRazorpayPayment = async () => {
         // Final validation check
-        const nameError = (!name || name.trim().length < 3 || name.trim().length > 50) ? 'Must be 3-50 characters' : '';
-        const districtError = (!district || district.trim().length < 3 || district.trim().length > 50) ? 'Must be 3-50 characters' : '';
+        const nameError = (!name || name.trim().length < 3) ? 'Must be 3+ characters' : '';
+        const districtError = (!district || district.trim().length < 3) ? 'Must be 3+ characters' : '';
+        const emailError = (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) ? 'Invalid email' : '';
+        const mobileError = (!mobile || !/^\d{10}$/.test(mobile)) ? 'Invalid mobile' : '';
         
-        if (nameError || districtError) {
-            setErrors({ name: nameError, district: districtError });
+        if (nameError || districtError || emailError || mobileError) {
+            setErrors({ name: nameError, district: districtError, email: emailError, mobile: mobileError });
             return;
         }
 
@@ -73,8 +87,10 @@ const PaymentPage: React.FC = () => {
                     const orderResponse = await api.post('/requests/create-order', {
                         requestId: id,
                         amount: parseFloat(amount),
-                        payerName: name,
-                        payerDistrict: district
+                        userName: name,
+                        email: email,
+                        mobile: mobile,
+                        district: district
                     });
 
                     const options = {
@@ -87,14 +103,11 @@ const PaymentPage: React.FC = () => {
                         handler: async function (response: any) {
                             try {
                                 // 2. Verify Payment on Backend
-                                await api.post('/requests/verify-payment', {
+                                await api.post(`/requests/${id}/verify-payment`, {
                                     razorpay_order_id: response.razorpay_order_id,
                                     razorpay_payment_id: response.razorpay_payment_id,
                                     razorpay_signature: response.razorpay_signature,
-                                    requestId: id,
-                                    amount: parseFloat(amount),
-                                    payerName: name,
-                                    payerDistrict: district
+                                    requestId: id
                                 });
                                 setSuccess(true);
                             } catch (err: any) {
@@ -159,8 +172,10 @@ const PaymentPage: React.FC = () => {
         );
     }
 
-    const isFormValid = name.trim().length >= 3 && name.trim().length <= 50 &&
-                      district.trim().length >= 3 && district.trim().length <= 50 &&
+    const isFormValid = name.trim().length >= 3 &&
+                      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
+                      /^\d{10}$/.test(mobile) &&
+                      district.trim().length >= 3 &&
                       amount !== '' && parseFloat(amount) > 0;
 
     return (
@@ -197,6 +212,45 @@ const PaymentPage: React.FC = () => {
                             />
                         </div>
                         {errors.name && <p className="payment-error-msg">{errors.name}</p>}
+                    </div>
+
+                    <div className="payment-input-group">
+                        <label>Email Address</label>
+                        <div className="payment-input-wrapper">
+                            <User size={18} className="payment-input-icon" /> {/* Using User icon for Email for now or Lucide Mail */}
+                            <input
+                                type="email"
+                                value={email}
+                                onBlur={() => validateField('email', email)}
+                                onChange={(e) => {
+                                    setEmail(e.target.value);
+                                    if (errors.email) validateField('email', e.target.value);
+                                }}
+                                placeholder="Enter your email"
+                                className={`payment-input ${errors.email ? 'error' : ''}`}
+                            />
+                        </div>
+                        {errors.email && <p className="payment-error-msg">{errors.email}</p>}
+                    </div>
+
+                    <div className="payment-input-group">
+                        <label>Mobile Number</label>
+                        <div className="payment-input-wrapper">
+                            <span style={{ position: 'absolute', left: '12px', color: 'var(--text-secondary)', fontSize: '14px', fontWeight: 500 }}>+91</span>
+                            <input
+                                type="text"
+                                style={{ paddingLeft: '45px' }}
+                                value={mobile}
+                                onBlur={() => validateField('mobile', mobile)}
+                                onChange={(e) => {
+                                    setMobile(e.target.value.replace(/\D/g, '').slice(0, 10));
+                                    if (errors.mobile) validateField('mobile', e.target.value);
+                                }}
+                                placeholder="10-digit mobile number"
+                                className={`payment-input ${errors.mobile ? 'error' : ''}`}
+                            />
+                        </div>
+                        {errors.mobile && <p className="payment-error-msg">{errors.mobile}</p>}
                     </div>
 
                     <div className="payment-input-group">

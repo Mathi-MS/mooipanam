@@ -6,6 +6,10 @@ const connectDB = require('./config/db');
 require('./config/passport');
 const passport = require('passport');
 
+// Payment listeners & Schedulers
+require('./listeners/paymentListeners');
+require('./schedulers/paymentSchedulers');
+
 const app = express();
 
 // Connect to Database

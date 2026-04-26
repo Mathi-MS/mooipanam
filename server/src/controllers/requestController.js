@@ -1,6 +1,9 @@
 const Request = require('../models/Request');
-const Razorpay = require('razorpay');
+const PaymentMetadata = require('../models/PaymentMetadata');
+const razorpay = require('../utils/razorpay');
 const crypto = require('crypto');
+const paymentEmitter = require('../utils/paymentEmitter');
+const { populatePaymentDetails } = require('../utils/paymentHelpers');
 
 // @desc    Create new request
 // @route   POST /api/requests
@@ -252,115 +255,176 @@ const submitOfflinePayment = async (req, res) => {
     }
 };
 
+// @desc    Get Razorpay Config
+// @route   GET /api/requests/razorpay-config
+// @access  Public
+const getRazorpayConfig = (req, res) => {
+    res.json({ keyId: process.env.RAZORPAY_KEY_ID });
+};
+
 // @desc    Create Razorpay Order
 // @route   POST /api/requests/create-order
 // @access  Public
 const createOrder = async (req, res) => {
     try {
-        const { requestId, amount, payerName, payerDistrict } = req.body;
-        console.log('Creating Order for Request:', requestId, 'Amount:', amount);
+        const { requestId, amount, userName, email, mobile } = req.body;
 
         if (!requestId || !amount) {
             return res.status(400).json({ message: 'Request ID and amount are required' });
         }
 
-        if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-            console.error('Razorpay keys are missing in .env');
-            return res.status(500).json({ message: 'Razorpay configuration missing' });
+        const requestDoc = await Request.findById(requestId);
+        if (!requestDoc) {
+            return res.status(404).json({ message: 'Request not found' });
         }
 
-        const razorpay = new Razorpay({
-            key_id: process.env.RAZORPAY_KEY_ID,
-            key_secret: process.env.RAZORPAY_KEY_SECRET
-        });
+        const amountInPaise = Math.round(amount * 100);
 
         const options = {
-            amount: Math.round(amount * 100), // amount in the smallest currency unit (paise)
+            amount: amountInPaise,
             currency: "INR",
-            receipt: `rcpt_${requestId.toString().slice(-10)}_${Date.now().toString().slice(-10)}`
+            receipt: `rcpt_${requestId.toString().slice(-10)}_${Date.now().toString().slice(-10)}`,
+            notes: {
+                requestId: requestId.toString(),
+                userId: req.user ? req.user._id.toString() : 'anonymous'
+            }
         };
 
         const order = await razorpay.orders.create(options);
 
+        // 1. Create Initial Metadata (Status = INITIATED)
+        const metadata = await PaymentMetadata.create({
+            orderId: order.id,
+            status: 'INITIATED',
+            amount: amountInPaise,
+            price: amount,
+            currency: 'INR',
+            requestId: requestId,
+            userId: req.user ? req.user._id.toString() : 'anonymous',
+            userName: userName || (req.user ? req.user.name : 'Unknown'),
+            email: email || (req.user ? req.user.email : ''),
+            mobile: mobile || '',
+            rawOrderResponse: JSON.stringify(order)
+        });
+
         res.json({
             orderId: order.id,
             amount: order.amount,
-            key: process.env.RAZORPAY_KEY_ID
+            key: process.env.RAZORPAY_KEY_ID,
+            metadataId: metadata._id
         });
     } catch (error) {
-        console.error('Razorpay Order Creation Error Full:', JSON.stringify(error, null, 2));
-        console.error('Razorpay Order Creation Error Message:', error.message);
+        console.error('Razorpay Order Creation Error:', error);
         res.status(500).json({ 
             message: 'Failed to create Razorpay order',
-            error: error.message || 'Unknown error',
-            details: error
+            error: error.message
         });
     }
 };
 
 // @desc    Verify online payment (Razorpay)
 // @route   POST /api/requests/:id/verify-payment
-// @access  Public (called after razorpay success)
+// @access  Public
 const verifyOnlinePayment = async (req, res) => {
     const { 
         razorpay_order_id, 
         razorpay_payment_id, 
         razorpay_signature, 
-        requestId, 
-        amount, 
-        payerName, 
-        payerDistrict 
+        requestId 
     } = req.body;
 
-    console.log('Verifying Online Payment:', {
-        razorpay_order_id,
-        razorpay_payment_id,
-        requestId,
-        amount,
-        payerName
-    });
-
     try {
-        // Verification Logic
-        if (!process.env.RAZORPAY_KEY_SECRET) {
-            console.error('RAZORPAY_KEY_SECRET missing in .env');
-            return res.status(500).json({ message: 'Razorpay configuration missing' });
+        const metadata = await PaymentMetadata.findOne({ orderId: razorpay_order_id });
+        if (!metadata) {
+            return res.status(404).json({ message: 'Payment record not found' });
         }
-        
-        const shasum = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET);
-        shasum.update(`${razorpay_order_id}|${razorpay_payment_id}`);
-        const digest = shasum.digest('hex');
 
-        if (digest !== razorpay_signature) {
-            console.error('Signature Mismatch:', { digest, razorpay_signature });
+        metadata.paymentId = razorpay_payment_id;
+        metadata.signature = razorpay_signature;
+
+        // Verify Signature
+        const hmac = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET);
+        hmac.update(razorpay_order_id + "|" + razorpay_payment_id);
+        const generatedSignature = hmac.digest('hex');
+
+        if (generatedSignature !== razorpay_signature) {
+            metadata.status = 'FAILED';
+            metadata.error = { code: 'BAD_SIGNATURE', description: 'Signature verification failed' };
+            await metadata.save();
             return res.status(400).json({ message: 'Payment verification failed: Invalid signature' });
         }
 
-        const request = await Request.findById(requestId || req.params.id);
-
-        if (!request) {
-            console.error('Request not found during verification:', requestId || req.params.id);
-            return res.status(404).json({ message: 'Request not found' });
+        // Fetch payment details to enrich metadata
+        try {
+            const payment = await razorpay.payments.fetch(razorpay_payment_id);
+            populatePaymentDetails(metadata, payment);
+        } catch (err) {
+            console.warn('Metadata enrichment failed:', err.message);
         }
 
-        console.log('Updating Request Payment Status:', request._id);
-        request.paymentStatus = 'paid';
-        request.totalAmount = (request.totalAmount || 0) + Number(amount);
-        request.payments.push({
-            method: 'online',
-            transactionId: razorpay_payment_id,
-            orderId: razorpay_order_id,
-            name: payerName,
-            district: payerDistrict,
-            amount: Number(amount),
-            paidAt: new Date()
-        });
+        if (metadata.status === 'INITIATED') {
+            metadata.status = 'PENDING'; // Webhook will confirm success
+        }
 
-        const savedRequest = await request.save();
-        console.log('Payment saved successfully for request:', savedRequest._id);
-        res.json({ message: 'Payment verified and stored successfully', request: savedRequest });
+        await metadata.save();
+
+        // Emit signal for immediate UI feedback if needed, 
+        // though usually we wait for SUCCESS state.
+        // If metadata is already SUCCESS (via webhook arriving fast), we are good.
+        if (metadata.status === 'SUCCESS' || metadata.status === 'PENDING') {
+            paymentEmitter.emit('paymentSuccess', metadata);
+        }
+
+        res.json({ message: 'Payment verified successfully', metadata });
     } catch (error) {
         console.error('Razorpay Verification Error:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Razorpay Webhook
+// @route   POST /api/requests/webhook
+// @access  Public (protected by razorpay signature)
+const razorpayWebhook = async (req, res) => {
+    const signature = req.headers['x-razorpay-signature'];
+    const payload = JSON.stringify(req.body);
+
+    try {
+        const expectedSignature = crypto
+            .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
+            .update(payload)
+            .digest('hex');
+
+        if (signature !== expectedSignature) {
+            return res.status(400).send('Invalid signature');
+        }
+
+        const event = req.body.event;
+        const entity = req.body.payload.payment.entity;
+        const orderId = entity.order_id;
+
+        const metadata = await PaymentMetadata.findOne({ orderId });
+        if (metadata) {
+            if (metadata.status === 'SUCCESS') return res.json({ status: 'ok' });
+
+            metadata.rawWebhookPayload = payload;
+            metadata.paymentId = entity.id;
+            populatePaymentDetails(metadata, entity);
+
+            if (event === 'payment.captured') {
+                metadata.status = 'SUCCESS';
+                paymentEmitter.emit('paymentSuccess', metadata);
+            } else if (event === 'payment.failed') {
+                metadata.status = 'FAILED';
+                metadata.error = { code: entity.error_code, description: entity.error_description };
+            }
+
+            await metadata.save();
+        }
+
+        res.json({ status: 'ok' });
+    } catch (error) {
+        console.error('Webhook Error:', error);
         res.status(500).json({ message: error.message });
     }
 };
@@ -557,8 +621,10 @@ module.exports = {
     reviewRequest,
     getRequestDetailsPublic,
     submitOfflinePayment,
+    getDashboardStats,
+    getRazorpayConfig,
+    razorpayWebhook,
     createOrder,
     verifyOnlinePayment,
-    getPaymentReports,
-    getDashboardStats
+    getPaymentReports
 };

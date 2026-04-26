@@ -9,6 +9,8 @@ const {
     reviewRequest,
     getRequestDetailsPublic,
     submitOfflinePayment,
+    razorpayWebhook,
+    getRazorpayConfig,
     createOrder,
     verifyOnlinePayment,
     getPaymentReports,
@@ -35,6 +37,8 @@ router.patch('/:id/review', protect, authorize('admin', 'superadmin'), reviewReq
 // Payment Routes
 router.get('/:id/public', getRequestDetailsPublic);
 router.post('/:id/offline-payment', protect, submitOfflinePayment);
+router.get('/razorpay-config', getRazorpayConfig);
+router.post('/webhook', razorpayWebhook);
 router.post('/create-order', createOrder);
 router.post('/:id/verify-payment', verifyOnlinePayment);
 
