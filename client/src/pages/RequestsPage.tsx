@@ -151,7 +151,7 @@ const RequestsPage: React.FC = () => {
     };
 
     const handleOpenQR = (id: string) => {
-        const url = `${window.location.origin}/payment/${id}`;
+        const url = `${window.location.origin}/#/payment/${id}`;
         setQrModal({ isOpen: true, url });
     };
 
